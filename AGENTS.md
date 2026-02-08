@@ -1,29 +1,35 @@
-# Notso Search Engine — Agent Instructions (AGENTS.md)
+# Notso Search Engine — Codex Contract (AGENTS.md)
 
-## Non-negotiables
+## Non-negotiables: “Built by us”
 - Standard library only. No pip/npm/cargo/maven/go modules.
-- Everything functional must be implemented in this repo by us.
-- No copying code from the internet. Re-implement from first principles.
-- Every major module must include at least one deterministic unit test.
-- Every response must update or add files (unless producing a Loop Break Report).
+- Do not add dependency files (requirements.txt, pyproject deps, package.json, etc).
+- All functional code must live in this repo and be authored here.
+- No copying code from the internet.
 
-## Loop avoidance
+## Must-haves
+- CLI + minimal HTTP API + tiny web UI (vanilla HTML/CSS/JS).
+- On-disk storage format documented and versioned.
+- Tests for every major module; deterministic.
+- Demo docs + demo command.
+
+## Anti-loop: STOP rules
 If you detect repetition or no net progress:
 1) Stop immediately.
-2) Output a “Loop Break Report”:
+2) Output a Loop Break Report:
    - Symptom
    - Root cause guess
    - Smallest next action (one file change or one command)
    - Acceptance criteria
    - Exactly 2 fallback options
 
-## Repo commands
-- Run tests: `python -m unittest -q`
-- Build index demo: `python tools/build_index.py`
-- Run server: `python -m notso.serve.httpd`
-- CLI search: `python -m notso.cli search "query"`
+## Response format (every time)
+- Work Completed
+- Next Actions (max 7)
+- Artifacts Updated/Added (paths)
 
-## Architecture rules
-- Keep modules small and focused.
-- Public interfaces must be documented (function signatures + docstrings).
-- Storage formats must be versioned and documented under `src/notso/storage/formats.md`.
+## Where to find the full specs
+- Master prompt: docs/MASTER_PROMPT.md
+- Workflow: docs/WORKFLOW.md
+- Repo blueprint: docs/REPO_BLUEPRINT.md
+- Agent prompts: docs/AGENTS/
+- Enforcement: tools/dependency_gate.py + tools/run_checks.py
