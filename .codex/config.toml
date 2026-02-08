@@ -1,0 +1,5 @@
+# .codex/config.toml
+# Keep rules in AGENTS.md. This file is mainly for project-scoping.
+
+# Optional: customize root detection if needed
+# project_root_markers = [".git"]
