@@ -6,8 +6,9 @@ import json
 import math
 from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+from .resource_plan import ResourceGuard, ResourceLimits, StopReason, plan_term_blocks
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -85,26 +86,55 @@ def build_index(documents: Iterable[Document]) -> SearchIndex:
     )
 
 
-def search(index: SearchIndex, query: str, top_k: int = 5) -> List[SearchResult]:
-    """Search the index for a query and return ranked results."""
+def search_with_limits(
+    index: SearchIndex,
+    query: str,
+    top_k: int = 5,
+    limits: Optional[ResourceLimits] = None,
+) -> Tuple[List[SearchResult], Optional[StopReason]]:
+    """Search the index with optional resource limits."""
 
     tokens = tokenize(query)
     if not tokens:
-        return []
-    query_tf = _term_frequencies(tokens)
+        return [], None
+    term_blocks = plan_term_blocks(tokens, index.idf, limits)
+    if not term_blocks:
+        return [], None
+
+    guard = ResourceGuard(limits or ResourceLimits())
+    guard.start()
+    allowed_terms = {term for block in term_blocks for term in block}
+    filtered_tokens = [term for term in tokens if term in allowed_terms]
+    query_tf = _term_frequencies(filtered_tokens)
     query_vec = {
         term: query_tf_val * index.idf.get(term, 0.0)
         for term, query_tf_val in query_tf.items()
     }
     query_norm = math.sqrt(sum(weight * weight for weight in query_vec.values()))
     if query_norm == 0.0:
-        return []
+        return [], None
     results: List[SearchResult] = []
+    stop_reason: Optional[StopReason] = None
+    docs_processed = 0
     for doc in index.documents:
+        stop_reason = guard.checkpoint(docs_processed=docs_processed, terms_processed=0)
+        if stop_reason:
+            break
+        docs_processed += 1
         doc_vector = index.doc_vectors.get(doc.doc_id, {})
         score = 0.0
-        for term, q_weight in query_vec.items():
-            score += q_weight * doc_vector.get(term, 0.0)
+        terms_processed = 0
+        for block in term_blocks:
+            for term in block:
+                q_weight = query_vec.get(term, 0.0)
+                score += q_weight * doc_vector.get(term, 0.0)
+            terms_processed += len(block)
+            stop_reason = guard.checkpoint(
+                docs_processed=docs_processed,
+                terms_processed=terms_processed,
+            )
+            if stop_reason:
+                break
         doc_norm = index.doc_norms.get(doc.doc_id, 0.0)
         if doc_norm > 0.0:
             score = score / (query_norm * doc_norm)
@@ -112,8 +142,17 @@ def search(index: SearchIndex, query: str, top_k: int = 5) -> List[SearchResult]
             score = 0.0
         if score > 0.0:
             results.append(SearchResult(doc_id=doc.doc_id, score=score, text=doc.text))
+        if stop_reason:
+            break
     results.sort(key=lambda item: item.score, reverse=True)
-    return results[: max(1, top_k)]
+    return results[: max(1, top_k)], stop_reason
+
+
+def search(index: SearchIndex, query: str, top_k: int = 5) -> List[SearchResult]:
+    """Search the index for a query and return ranked results."""
+
+    results, _stop_reason = search_with_limits(index, query, top_k=top_k)
+    return results
 
 
 def save_index(index: SearchIndex, path: str | Path) -> None:
