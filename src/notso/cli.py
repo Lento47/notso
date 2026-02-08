@@ -5,7 +5,8 @@ import argparse
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
-from .engine import SearchResult, build_index, load_index, save_index, search
+from .engine import SearchResult, build_index, load_index, save_index, search_with_limits
+from .resource_plan import ResourceLimits
 from .sample_docs import SAMPLE_DOCUMENTS
 
 
@@ -18,7 +19,8 @@ def _print_results(results: Iterable[SearchResult]) -> None:
 
 
 def _handle_index(args: argparse.Namespace) -> int:
-    index = build_index(SAMPLE_DOCUMENTS)
+    documents = load_documents(Path(args.data)) if args.data else SAMPLE_DOCUMENTS
+    index = build_index(documents)
     save_index(index, args.output)
     print(f"Indexed {len(index.documents)} documents into {args.output}")
     return 0
@@ -26,11 +28,20 @@ def _handle_index(args: argparse.Namespace) -> int:
 
 def _handle_search(args: argparse.Namespace) -> int:
     index = load_index(args.index)
-    results = search(index, args.query, top_k=args.top_k)
+    limits = ResourceLimits(
+        max_seconds=args.max_seconds,
+        max_memory_bytes=args.max_memory_kb * 1024 if args.max_memory_kb else None,
+        max_documents=args.max_docs,
+        max_query_terms=args.max_terms,
+        term_block_size=args.term_block_size,
+    )
+    results, stop_reason = search_with_limits(index, args.query, top_k=args.top_k, limits=limits)
     if not results:
         print("No results found.")
         return 0
     _print_results(results)
+    if stop_reason:
+        print(f"Search stopped early: {stop_reason.reason} ({stop_reason.detail})")
     return 0
 
 
@@ -46,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(DEFAULT_INDEX_PATH),
         help="Output path for the index JSON",
     )
+    index_parser.add_argument(
+        "--data",
+        default=None,
+        help="Optional path to a JSON corpus file",
+    )
     index_parser.set_defaults(func=_handle_index)
 
     search_parser = subparsers.add_parser("search", help="Search the index")
@@ -60,6 +76,36 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=5,
         help="Number of results to return",
+    )
+    search_parser.add_argument(
+        "--max-seconds",
+        type=float,
+        default=None,
+        help="Stop searching after this many seconds",
+    )
+    search_parser.add_argument(
+        "--max-memory-kb",
+        type=int,
+        default=None,
+        help="Stop searching after this many kilobytes of memory",
+    )
+    search_parser.add_argument(
+        "--max-docs",
+        type=int,
+        default=None,
+        help="Stop searching after scoring this many documents",
+    )
+    search_parser.add_argument(
+        "--max-terms",
+        type=int,
+        default=None,
+        help="Limit the number of query terms used for scoring",
+    )
+    search_parser.add_argument(
+        "--term-block-size",
+        type=int,
+        default=None,
+        help="Process query terms in blocks of this size",
     )
     search_parser.set_defaults(func=_handle_search)
 
