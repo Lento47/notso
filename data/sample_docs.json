@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "documents": [
+    {
+      "id": "doc-1",
+      "title": "Quick   Brown Fox",
+      "content": "The quick brown  fox jumps over the lazy dog.",
+      "metadata": {
+        "topic": "animals",
+        "source": "proverb"
+      }
+    },
+    {
+      "id": "doc-2",
+      "title": "Search Engines",
+      "content": "Search engines rank documents based on relevance signals.",
+      "metadata": {
+        "topic": "retrieval"
+      }
+    },
+    {
+      "id": "doc-3",
+      "title": "Indexing Demo",
+      "content": "Indexing sample documents helps test search quality.",
+      "metadata": {
+        "topic": "testing"
+      }
+    },
+    {
+      "id": "doc-4",
+      "title": "Python Standard Library",
+      "content": "Python standard library tools enable quick prototypes.",
+      "metadata": {
+        "topic": "python"
+      }
+    },
+    {
+      "id": "doc-5",
+      "title": "Ranking Results",
+      "content": "Ranking results with scores improves user trust.",
+      "metadata": {
+        "topic": "ranking"
+      }
+    }
+  ]
+}

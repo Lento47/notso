@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable, List, Sequence
 
 from .engine import SearchResult, build_index, load_index, save_index, search
-from .sample_docs import SAMPLE_DOCUMENTS
+from .sample_docs import SAMPLE_DOCUMENTS, load_documents
 
 
 DEFAULT_INDEX_PATH = Path("data/index.json")
@@ -18,7 +18,8 @@ def _print_results(results: Iterable[SearchResult]) -> None:
 
 
 def _handle_index(args: argparse.Namespace) -> int:
-    index = build_index(SAMPLE_DOCUMENTS)
+    documents = load_documents(Path(args.data)) if args.data else SAMPLE_DOCUMENTS
+    index = build_index(documents)
     save_index(index, args.output)
     print(f"Indexed {len(index.documents)} documents into {args.output}")
     return 0
@@ -45,6 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         default=str(DEFAULT_INDEX_PATH),
         help="Output path for the index JSON",
+    )
+    index_parser.add_argument(
+        "--data",
+        default=None,
+        help="Optional path to a JSON corpus file",
     )
     index_parser.set_defaults(func=_handle_index)
 
