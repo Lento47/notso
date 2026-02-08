@@ -9,7 +9,7 @@ from string import Template
 from typing import Iterable, List
 from urllib.parse import parse_qs, urlparse
 
-from ..engine import SearchIndex, SearchResult, build_index, load_index, search
+from ..engine import InMemoryIndex as SearchIndex, SearchResult, build_index, load_index, search
 from ..sample_docs import SAMPLE_DOCUMENTS
 
 

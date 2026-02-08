@@ -5,10 +5,10 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, List
 
-from .models import Document
+from ..core.models import Document
 
 
-DEFAULT_SAMPLE_PATH = Path(__file__).resolve().parents[2] / "data" / "sample_docs.json"
+DEFAULT_SAMPLE_PATH = Path(__file__).resolve().parents[3] / "data" / "sample_docs.json"
 
 
 def _normalize_text(text: str) -> str:

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Iterable, List, Sequence
 
 from .engine import SearchResult, build_index, load_index, save_index, search_with_limits
+from .ingest.loader import load_documents_from_json
 from .resource_plan import ResourceLimits
 from .sample_docs import SAMPLE_DOCUMENTS
 
@@ -19,10 +20,10 @@ def _print_results(results: Iterable[SearchResult]) -> None:
 
 
 def _handle_index(args: argparse.Namespace) -> int:
-    documents = load_documents(Path(args.data)) if args.data else SAMPLE_DOCUMENTS
+    documents = load_documents_from_json(Path(args.data)) if args.data else SAMPLE_DOCUMENTS
     index = build_index(documents)
     save_index(index, args.output)
-    print(f"Indexed {len(index.documents)} documents into {args.output}")
+    print(f"Indexed {index.document_count()} documents into {args.output}")
     return 0
 
 

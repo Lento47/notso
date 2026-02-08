@@ -1,6 +1,7 @@
 import unittest
 
-from notso.engine import Document, build_index, search_with_limits
+from notso.core.models import Document
+from notso.engine import build_index, search_with_limits
 from notso.resource_plan import ResourceGuard, ResourceLimits, plan_term_blocks
 
 
@@ -30,8 +31,8 @@ class ResourcePlanTests(unittest.TestCase):
 
     def test_search_with_limits_stops_on_doc_budget(self) -> None:
         documents = [
-            Document(doc_id="a", text="alpha beta gamma"),
-            Document(doc_id="b", text="alpha beta"),
+            Document(doc_id="a", title="A", content="alpha beta gamma", metadata={}),
+            Document(doc_id="b", title="B", content="alpha beta", metadata={}),
         ]
         index = build_index(documents)
         limits = ResourceLimits(max_documents=1)

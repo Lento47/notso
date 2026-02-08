@@ -1,35 +1,15 @@
-"""Core search engine logic for building and querying an index."""
+"""Core search engine plumbing."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-import math
 from pathlib import Path
-import re
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import List, Optional, Tuple
 
-from .resource_plan import ResourceGuard, ResourceLimits, StopReason, plan_term_blocks
-
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
-
-
-@dataclass(frozen=True)
-class Document:
-    """Represents a document to index."""
-
-    doc_id: str
-    text: str
-
-
-@dataclass(frozen=True)
-class SearchIndex:
-    """In-memory search index with TF-IDF weights and norms."""
-
-    version: int
-    documents: List[Document]
-    idf: Dict[str, float]
-    doc_vectors: Dict[str, Dict[str, float]]
-    doc_norms: Dict[str, float]
+from .core.index import InMemoryIndex, build_in_memory_index
+from .core.models import Document
+from .core.ranker import HybridRanker, tokenize
+from .resource_plan import ResourceGuard, ResourceLimits, StopReason, plan_query_terms
 
 
 @dataclass(frozen=True)
@@ -41,53 +21,13 @@ class SearchResult:
     text: str
 
 
-def tokenize(text: str) -> List[str]:
-    """Tokenize text into lowercase alphanumeric tokens."""
-
-    return _TOKEN_RE.findall(text.lower())
-
-
-def _term_frequencies(tokens: Sequence[str]) -> Dict[str, float]:
-    counts: Dict[str, float] = {}
-    for token in tokens:
-        counts[token] = counts.get(token, 0.0) + 1.0
-    return counts
-
-
-def build_index(documents: Iterable[Document]) -> SearchIndex:
-    """Build a TF-IDF search index from documents."""
-
-    docs = list(documents)
-    tokenized = [tokenize(doc.text) for doc in docs]
-    doc_freq: Dict[str, float] = {}
-    for tokens in tokenized:
-        seen = set(tokens)
-        for token in seen:
-            doc_freq[token] = doc_freq.get(token, 0.0) + 1.0
-    total_docs = float(len(docs))
-    idf = {
-        term: math.log((1.0 + total_docs) / (1.0 + freq)) + 1.0
-        for term, freq in doc_freq.items()
-    }
-    doc_vectors: Dict[str, Dict[str, float]] = {}
-    doc_norms: Dict[str, float] = {}
-    for doc, tokens in zip(docs, tokenized):
-        tf = _term_frequencies(tokens)
-        vector = {term: tf_val * idf[term] for term, tf_val in tf.items()}
-        norm = math.sqrt(sum(weight * weight for weight in vector.values()))
-        doc_vectors[doc.doc_id] = vector
-        doc_norms[doc.doc_id] = norm
-    return SearchIndex(
-        version=1,
-        documents=docs,
-        idf=idf,
-        doc_vectors=doc_vectors,
-        doc_norms=doc_norms,
-    )
+def build_index(documents: List[Document]) -> InMemoryIndex:
+    """Build a search index from documents."""
+    return build_in_memory_index(documents)
 
 
 def search_with_limits(
-    index: SearchIndex,
+    index: InMemoryIndex,
     query: str,
     top_k: int = 5,
     limits: Optional[ResourceLimits] = None,
@@ -97,92 +37,111 @@ def search_with_limits(
     tokens = tokenize(query)
     if not tokens:
         return [], None
-    term_blocks = plan_term_blocks(tokens, index.idf, limits)
-    if not term_blocks:
-        return [], None
+
+    # Calculate IDF for query planning
+    idf_map = {}
+    doc_count = index.document_count()
+    if doc_count > 0:
+        for term in set(tokens):
+            df = index.document_frequency(term)
+            # Standard IDF formula: log(N / df)
+            # Using specific formula from ranker if needed, but a simple one here for planning
+            if df > 0:
+                import math
+                idf_map[term] = math.log((doc_count - df + 0.5) / (df + 0.5) + 1.0)
+            else:
+                idf_map[term] = 0.0
+
+    ordered_terms = plan_query_terms(tokens, idf_map, limits)
+    if not ordered_terms:
+         return [], None
 
     guard = ResourceGuard(limits or ResourceLimits())
     guard.start()
-    allowed_terms = {term for block in term_blocks for term in block}
-    filtered_tokens = [term for term in tokens if term in allowed_terms]
-    query_tf = _term_frequencies(filtered_tokens)
-    query_vec = {
-        term: query_tf_val * index.idf.get(term, 0.0)
-        for term, query_tf_val in query_tf.items()
-    }
-    query_norm = math.sqrt(sum(weight * weight for weight in query_vec.values()))
-    if query_norm == 0.0:
-        return [], None
+
+    ranker = HybridRanker()
+    # Pre-calculate corpus stats
+    avg_len = index.average_document_length()
+    
+    # We only need to score documents that contain at least one query term
+    # Optimization: simple OR query retrieval
+    candidate_doc_ids = set()
+    for term in ordered_terms:
+        # This is where we would ideally have an inverted index that gives us doc_ids easily
+        # The InMemoryIndex has _term_frequencies: doc_id -> {term: count}
+        # But not inverted index: term -> [doc_ids]
+        # For this refactor, we iterate all docs (efficient enough for small scale)
+        # OR we could rely on the fact the original engine iterated all docs.
+        pass
+
     results: List[SearchResult] = []
     stop_reason: Optional[StopReason] = None
     docs_processed = 0
-    for doc in index.documents:
+    
+    # Optimization: In a real system we'd use an inverted index. 
+    # For now, we iterate all docs to maintain behavior of original engine but use new ranker.
+    
+    for doc in index.documents():
         stop_reason = guard.checkpoint(docs_processed=docs_processed, terms_processed=0)
         if stop_reason:
             break
         docs_processed += 1
-        doc_vector = index.doc_vectors.get(doc.doc_id, {})
-        score = 0.0
-        terms_processed = 0
-        for block in term_blocks:
-            for term in block:
-                q_weight = query_vec.get(term, 0.0)
-                score += q_weight * doc_vector.get(term, 0.0)
-            terms_processed += len(block)
-            stop_reason = guard.checkpoint(
-                docs_processed=docs_processed,
-                terms_processed=terms_processed,
-            )
-            if stop_reason:
-                break
-        doc_norm = index.doc_norms.get(doc.doc_id, 0.0)
-        if doc_norm > 0.0:
-            score = score / (query_norm * doc_norm)
-        else:
-            score = 0.0
-        if score > 0.0:
-            results.append(SearchResult(doc_id=doc.doc_id, score=score, text=doc.text))
-        if stop_reason:
-            break
+        
+        tf = index.term_frequencies(doc.doc_id)
+        
+        # Check if doc has any of the query terms to avoid scoring irrelevant docs
+        if not any(t in tf for t in ordered_terms):
+             continue
+
+        score = ranker.score(
+            query_terms=ordered_terms,
+            document=doc,
+            term_frequencies=tf,
+            average_document_length=avg_len,
+            corpus_size=doc_count,
+            document_frequency_lookup=index.document_frequency
+        )
+
+        if score > 0:
+            results.append(SearchResult(doc_id=doc.doc_id, score=score, text=doc.content))
+
     results.sort(key=lambda item: item.score, reverse=True)
     return results[: max(1, top_k)], stop_reason
 
 
-def search(index: SearchIndex, query: str, top_k: int = 5) -> List[SearchResult]:
+def search(index: InMemoryIndex, query: str, top_k: int = 5) -> List[SearchResult]:
     """Search the index for a query and return ranked results."""
-
-    results, _stop_reason = search_with_limits(index, query, top_k=top_k)
+    results, _ = search_with_limits(index, query, top_k=top_k)
     return results
 
 
-def save_index(index: SearchIndex, path: str | Path) -> None:
+def save_index(index: InMemoryIndex, path: str | Path) -> None:
     """Save the index to disk as JSON."""
-
     path = Path(path)
+    # Reconstruct the payload format expected by InMemoryIndex or create a new one.
+    # The original engine saved a specific format. We should try to respect a unified format.
+    # Let's save enough to reconstruct the InMemoryIndex.
+    
     payload = {
-        "version": index.version,
-        "documents": [{"id": doc.doc_id, "text": doc.text} for doc in index.documents],
-        "idf": index.idf,
-        "doc_vectors": index.doc_vectors,
-        "doc_norms": index.doc_norms,
+        "version": 2, # Bump version to signal change
+        "documents": [{"id": doc.doc_id, "title": doc.title, "content": doc.content, "metadata": doc.metadata} for doc in index.documents()],
+        # We can re-compute stats on load, so we just save documents for simplicity in this version,
+        # OR we save the pre-computed stats if we want fast load.
+        # Let's stick to saving documents for now as the 'source of truth' for the index.
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def load_index(path: str | Path) -> SearchIndex:
+def load_index(path: str | Path) -> InMemoryIndex:
     """Load the index from disk."""
-
     path = Path(path)
     payload = json.loads(path.read_text(encoding="utf-8"))
-    documents = [Document(doc_id=item["id"], text=item["text"]) for item in payload["documents"]]
-    return SearchIndex(
-        version=payload["version"],
-        documents=documents,
-        idf={key: float(value) for key, value in payload["idf"].items()},
-        doc_vectors={
-            doc_id: {term: float(weight) for term, weight in weights.items()}
-            for doc_id, weights in payload["doc_vectors"].items()
-        },
-        doc_norms={key: float(value) for key, value in payload["doc_norms"].items()},
-    )
+    
+    # Handle legacy version 1 (from original engine.py)
+    if payload.get("version") == 1:
+        documents = [Document(doc_id=item["id"], title="", content=item["text"], metadata={}) for item in payload["documents"]]
+    else:
+        documents = [Document(doc_id=item["id"], title=item.get("title", ""), content=item["content"], metadata=item.get("metadata")) for item in payload["documents"]]
+        
+    return build_in_memory_index(documents)

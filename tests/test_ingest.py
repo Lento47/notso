@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from search.ingest import DEFAULT_SAMPLE_PATH, load_documents_from_json
+from notso.ingest.loader import DEFAULT_SAMPLE_PATH, load_documents_from_json
 
 
 def test_loads_sample_documents() -> None:
