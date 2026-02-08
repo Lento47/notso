@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Notso Search Results</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f1ea;
+        --card: #fffaf2;
+        --text: #1d1b16;
+        --muted: #4d4336;
+        --border: #e5ddcf;
+        --accent: #2d241a;
+        --accent-text: #fffaf2;
+        --badge: #6a5b45;
+        --input-border: #b7a68f;
+        --shadow: 0 6px 24px rgba(36, 24, 8, 0.08);
+        --result-bg: #fffcf6;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --bg: #12100c;
+          --card: #1b1812;
+          --text: #f2ece3;
+          --muted: #c8bfb2;
+          --border: #2b2419;
+          --accent: #e6d7c2;
+          --accent-text: #1b1812;
+          --badge: #d8c9b2;
+          --input-border: #6f5f49;
+          --shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+          --result-bg: #1f1b14;
+        }
+      }
+      body {
+        font-family: "Source Serif 4", "Georgia", serif;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.5;
+      }
+      .page {
+        min-height: 100vh;
+        padding: 60px 20px;
+        display: flex;
+        justify-content: center;
+      }
+      .card {
+        background: var(--card);
+        padding: 36px 40px 40px;
+        border-radius: 14px;
+        max-width: 900px;
+        width: 100%;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      h1 {
+        margin: 0;
+        font-size: 2.1rem;
+        font-weight: 600;
+      }
+      .back {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+        font-family: "Helvetica Neue", Arial, sans-serif;
+      }
+      .meta {
+        margin: 12px 0 18px;
+        color: var(--muted);
+        font-size: 0.98rem;
+        font-family: "Helvetica Neue", Arial, sans-serif;
+      }
+      form {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 28px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 12px;
+      }
+      input[type="text"] {
+        flex: 1;
+        padding: 12px 6px;
+        border: none;
+        border-bottom: 2px solid var(--input-border);
+        background: transparent;
+        font-size: 1.05rem;
+        color: inherit;
+        outline: none;
+      }
+      input[type="text"]::placeholder { color: var(--muted); }
+      button {
+        padding: 10px 16px;
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        background: var(--accent);
+        color: var(--accent-text);
+        font-weight: 600;
+        cursor: pointer;
+        font-family: "Helvetica Neue", Arial, sans-serif;
+      }
+      button:hover { filter: brightness(0.95); }
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 16px;
+      }
+      li {
+        padding: 18px 20px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--result-bg);
+      }
+      .result-title {
+        font-weight: 700;
+        font-size: 1.08rem;
+        font-family: "Helvetica Neue", Arial, sans-serif;
+      }
+      .result-score {
+        color: var(--badge);
+        font-size: 0.84rem;
+        margin-top: 6px;
+        font-family: "Helvetica Neue", Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .result-text {
+        margin-top: 10px;
+        color: var(--text);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="card">
+        <div class="header">
+          <h1>Results</h1>
+          <a class="back" href="/">Back to search</a>
+        </div>
+        <p class="meta">Showing ranked matches for "<strong>$query</strong>".</p>
+        <form action="/search" method="get">
+          <input type="text" name="q" placeholder="Search documents" value="$query" />
+          <button type="submit">Search</button>
+        </form>
+        <ul>
+          $results_html
+        </ul>
+      </div>
+    </div>
+  </body>
+</html>
